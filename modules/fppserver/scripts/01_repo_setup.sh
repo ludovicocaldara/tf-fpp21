@@ -21,3 +21,11 @@ EOF
 
 yum repolist
 yum install -y git rlwrap jq
+
+# DBCS uses iptables and not firewalld
+systemctl stop iptables
+systemctl disable iptables
+
+# disable client timeout via ssh
+sed -i /^ClientAliveInterval/d /etc/ssh/sshd_config
+systemctl restart sshd

@@ -25,17 +25,31 @@ variable "availability_domain_name" {
   description = "Your availability domain, eg: \"OUGC:UK-LONDON-1-AD-1\""
 }
 
+# ----------------------------------
+# OCI User information for API access
+# ----------------------------------
+variable "ociUserOcid" { 
+  description = "Your compartment OCID, eg: \"ocid1.user.oc1..aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\""
+}
+variable "fingerprint" { 
+  description = "Your user fingerprint, eg: \"de:ad:be:ef:de:ad:be:ef:de:ad:be:ef:de:ad:be:ef\""
+}
+variable "private_key_path" { 
+  description = "Path to your PEM key for OCI APIs, eg: \"~/.ssh/oci.pem\""
+}
+
 # ---------------------------------
 # LiveLab specific:
 # ---------------------------------
 
 variable "resId" {
   description = "Reservations in livelab have a specific identifier. The green button will override this variable with that identifier."
-  default = "LL000"
+  default = "1234"
 }
 
 variable "resUserPublicKey" {
-  description = "LiveLab users will upload their public SSH key, this is what will be used to give them access as opc."
+  description = "LiveLab users will upload their public SSH key, this is what will be used to give them access as opc. For github users, this might be an additional public key for access as opc"
+  default = ""
 }
 
 
@@ -45,4 +59,8 @@ variable "resUserPublicKey" {
 provider "oci" {
   tenancy_ocid = var.tenancy_ocid
   region = var.region
+  user_ocid = var.ociUserOcid
+  private_key_path = var.private_key_path
+  fingerprint = var.fingerprint
 }
+

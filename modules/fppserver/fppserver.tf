@@ -6,8 +6,14 @@ data "template_file" "repo_setup" {
   template = file("${path.module}/scripts/01_repo_setup.sh")
 }
 
-data "template_file" "mgmtdb_setup" {
-  template = file("${path.module}/scripts/02_mgmtdb_setup.sh")
+data "template_file" "mgmtdb_setup_a" {
+  template = file("${path.module}/scripts/02a_mgmtdb_removedb.sh")
+}
+data "template_file" "mgmtdb_setup_b" {
+  template = file("${path.module}/scripts/02b_mgmtdb_changeoh.sh")
+}
+data "template_file" "mgmtdb_setup_c" {
+  template = file("${path.module}/scripts/02c_mgmtdb_setup.sh")
 }
 
 data "template_file" "fpp_setup" {
@@ -15,14 +21,15 @@ data "template_file" "fpp_setup" {
 
   vars = {
     gns_ip         = cidrhost(var.subnet_cidr, var.gns_ip_offset)
-    ha_vip         = cidrhost(var.subnet_cidr, var.ha_vip_offset)
   }
 
 }
 
 locals {
   repo_script      = "/tmp/01_repo_setup.sh"
-  mgmtdb_script    = "/tmp/02_mgmtdb_setup.sh"
+  mgmtdb_script_a  = "/tmp/02a_mgmtdb_removedb.sh"
+  mgmtdb_script_b  = "/tmp/02b_mgmtdb_changeoh.sh"
+  mgmtdb_script_c  = "/tmp/02c_mgmtdb_setup.sh"
   fpp_script       = "/tmp/03_fpp_setup.sh"
   dhclient_script  = "/tmp/dhclient.sh"
   dhclient_setup   = file("${path.module}/scripts/set-domain.sh")
@@ -106,8 +113,34 @@ resource "null_resource" "fpp_provisioner" {
     }
   }
   provisioner "file" {
-    content     = data.template_file.mgmtdb_setup.rendered
-    destination = local.mgmtdb_script
+    content     = data.template_file.mgmtdb_setup_a.rendered
+    destination = local.mgmtdb_script_b
+    connection  {
+      type        = "ssh"
+      host        = data.oci_core_vnic.fppll_vnic.public_ip_address
+      agent       = false
+      timeout     = "5m"
+      user        = var.vm_user
+      private_key = var.ssh_private_key
+
+    }
+  }
+  provisioner "file" {
+    content     = data.template_file.mgmtdb_setup_b.rendered
+    destination = local.mgmtdb_script_b
+    connection  {
+      type        = "ssh"
+      host        = data.oci_core_vnic.fppll_vnic.public_ip_address
+      agent       = false
+      timeout     = "5m"
+      user        = var.vm_user
+      private_key = var.ssh_private_key
+
+    }
+  }
+  provisioner "file" {
+    content     = data.template_file.mgmtdb_setup_c.rendered
+    destination = local.mgmtdb_script_c
     connection  {
       type        = "ssh"
       host        = data.oci_core_vnic.fppll_vnic.public_ip_address
@@ -144,9 +177,13 @@ resource "null_resource" "fpp_provisioner" {
    
     inline = [
        "chmod +x ${local.repo_script}",
-       "sudo ${local.repo_script}",
-       "chmod +x ${local.mgmtdb_script}",
-       "sudo -u grid ${local.mgmtdb_script}",
+       "sudo ${local.repo_script}" ,
+       "chmod +x ${local.mgmtdb_script_a}",
+       "sudo -u oracle ${local.mgmtdb_script_a}",
+       "chmod +x ${local.mgmtdb_script_b}",
+       "sudo ${local.mgmtdb_script_b}",
+       "chmod +x ${local.mgmtdb_script_c}",
+       "sudo -u grid ${local.mgmtdb_script_c}",
        "chmod +x ${local.fpp_script}",
        "sudo ${local.fpp_script}"
     ]
