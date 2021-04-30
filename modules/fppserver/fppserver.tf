@@ -123,6 +123,9 @@ resource "null_resource" "fpp_os_setup" {
 # ssh provisioner #2: remove existing DB
 data "template_file" "mgmtdb_setup_a" {
   template = file("${path.module}/scripts/02a_mgmtdb_removedb.sh")
+  vars = {
+    pdb_name         = var.pdb_name
+  }
 }
 
 resource "null_resource" "fpp_removedb" {
@@ -251,7 +254,7 @@ data "template_file" "fpp_setup" {
 
 }
 resource "null_resource" "fpp_provisioner" {
-  depends_on = [null_resource.fpp_changeoh]
+  depends_on = [null_resource.fpp_mgmtdb_setup]
 
   provisioner "file" {
     content     = data.template_file.fpp_setup.rendered

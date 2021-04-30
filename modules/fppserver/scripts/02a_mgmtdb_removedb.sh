@@ -7,6 +7,8 @@
 # run as user oracle: stop and remove the DB configured by the DBCS VM tooling.
 # We use its Oracle Home to configure MGMTDB
 
+PDB_NAME=${pdb_name}
+
 # get GRID HOME
 GI_HOME=$(cat /etc/oracle/olr.loc 2>/dev/null | grep crs_home | awk -F= '{print $2}')
 
@@ -19,4 +21,5 @@ export ORACLE_HOME=$(cat /u01/app/oraInventory/ContentsXML/inventory.xml | grep 
 
 # stop and remove the DB
 $ORACLE_HOME/bin/srvctl stop database -database $DB_UNIQUE_NAME
+$ORACLE_HOME/bin/srvctl remove pdb -database $DB_UNIQUE_NAME -pdb $PDB_NAME -noprompt
 $ORACLE_HOME/bin/srvctl remove database -database $DB_UNIQUE_NAME -noprompt
