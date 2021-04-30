@@ -11,9 +11,9 @@
 export ORACLE_HOME=$(cat /u01/app/oraInventory/ContentsXML/inventory.xml | grep TYPE=\"O\" | grep -v CRS=\"true\" | awk '{print $3}' | awk -F\" '{print $2}')
 
 # remove the current entry in sqlnet.ora for the wallet and add a new one:
-sed -i /^ENCRYPTION_WALLET_LOCATION/d $(orabasehome)/network/admin/sqlnet.ora
+sed -i /^ENCRYPTION_WALLET_LOCATION/d $($ORACLE_HOME/bin/orabasehome)/network/admin/sqlnet.ora
 
-cat <<EOF >> $(orabasehome)/network/admin/sqlnet.ora
+cat <<EOF >> $($ORACLE_HOME/bin/orabasehome)/network/admin/sqlnet.ora
 ENCRYPTION_WALLET_LOCATION=(SOURCE=(METHOD=FILE)(METHOD_DATA=(DIRECTORY=/u01/app/oracle/wallets/mgmtdb)))
 EOF
 mkdir -p /u01/app/oracle/wallets/mgmtdb && chmod 700 /u01/app/oracle/wallets/mgmtdb

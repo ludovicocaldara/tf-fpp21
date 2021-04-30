@@ -1,30 +1,8 @@
 # Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved
 # Licensed under the Universal Permissive License v 1.0 as shown at http://oss.oracle.com/licenses/upl.
-###################################################
-# declaration of the templates scripts for FPP setup
-data "template_file" "repo_setup" {
-  template = file("${path.module}/scripts/01_repo_setup.sh")
-}
 
-data "template_file" "mgmtdb_setup_a" {
-  template = file("${path.module}/scripts/02a_mgmtdb_removedb.sh")
-}
-data "template_file" "mgmtdb_setup_b" {
-  template = file("${path.module}/scripts/02b_mgmtdb_changeoh.sh")
-}
-data "template_file" "mgmtdb_setup_c" {
-  template = file("${path.module}/scripts/02c_mgmtdb_setup.sh")
-}
 
-data "template_file" "fpp_setup" {
-  template = file("${path.module}/scripts/03_fpp_setup.sh")
-
-  vars = {
-    gns_ip         = cidrhost(var.subnet_cidr, var.gns_ip_offset)
-  }
-
-}
-
+# some locals that I use to define paths for the remote ssh provisioners
 locals {
   repo_script      = "/tmp/01_repo_setup.sh"
   mgmtdb_script_a  = "/tmp/02a_mgmtdb_removedb.sh"
@@ -96,7 +74,19 @@ resource "oci_database_db_system" "fppll_db_system" {
 }
 
 
-resource "null_resource" "fpp_provisioner" {
+###################################################
+# PROVISIONERS SECTION
+# each remote execution must be atomic as those are not idempotent at all.
+# Ansible provisioner would be a much better idea but not available everywhere.
+###################################################
+
+###################################################
+# ssh provisioner #1: repo setup
+data "template_file" "repo_setup" {
+  template = file("${path.module}/scripts/01_repo_setup.sh")
+}
+
+resource "null_resource" "fpp_os_setup" {
   depends_on = [oci_database_db_system.fppll_db_system]
 
   provisioner "file" {
@@ -112,9 +102,35 @@ resource "null_resource" "fpp_provisioner" {
 
     }
   }
+  provisioner "remote-exec" {
+    connection  {
+      type        = "ssh"
+      host        = data.oci_core_vnic.fppll_vnic.public_ip_address
+      agent       = false
+      timeout     = "30m"
+      user        = var.vm_user
+      private_key = var.ssh_private_key
+    }
+   
+    inline = [
+       "chmod +x ${local.repo_script}",
+       "sudo ${local.repo_script}" ,
+    ]
+   }
+}
+
+###################################################
+# ssh provisioner #2: remove existing DB
+data "template_file" "mgmtdb_setup_a" {
+  template = file("${path.module}/scripts/02a_mgmtdb_removedb.sh")
+}
+
+resource "null_resource" "fpp_removedb" {
+  depends_on = [null_resource.fpp_os_setup]
+
   provisioner "file" {
     content     = data.template_file.mgmtdb_setup_a.rendered
-    destination = local.mgmtdb_script_b
+    destination = local.mgmtdb_script_a
     connection  {
       type        = "ssh"
       host        = data.oci_core_vnic.fppll_vnic.public_ip_address
@@ -125,6 +141,33 @@ resource "null_resource" "fpp_provisioner" {
 
     }
   }
+  provisioner "remote-exec" {
+    connection  {
+      type        = "ssh"
+      host        = data.oci_core_vnic.fppll_vnic.public_ip_address
+      agent       = false
+      timeout     = "30m"
+      user        = var.vm_user
+      private_key = var.ssh_private_key
+    }
+   
+    inline = [
+       "chmod +x ${local.mgmtdb_script_a}",
+       "sudo -u oracle ${local.mgmtdb_script_a}",
+    ]
+
+   }
+}
+
+###################################################
+# ssh provisioner #3: change OH
+data "template_file" "mgmtdb_setup_b" {
+  template = file("${path.module}/scripts/02b_mgmtdb_changeoh.sh")
+}
+
+resource "null_resource" "fpp_changeoh" {
+  depends_on = [null_resource.fpp_removedb]
+
   provisioner "file" {
     content     = data.template_file.mgmtdb_setup_b.rendered
     destination = local.mgmtdb_script_b
@@ -138,6 +181,34 @@ resource "null_resource" "fpp_provisioner" {
 
     }
   }
+
+  provisioner "remote-exec" {
+    connection  {
+      type        = "ssh"
+      host        = data.oci_core_vnic.fppll_vnic.public_ip_address
+      agent       = false
+      timeout     = "30m"
+      user        = var.vm_user
+      private_key = var.ssh_private_key
+    }
+   
+    inline = [
+       "chmod +x ${local.mgmtdb_script_b}",
+       "sudo ${local.mgmtdb_script_b}",
+    ]
+
+   }
+}
+
+###################################################
+# ssh provisioner #4: create MGMTDB
+data "template_file" "mgmtdb_setup_c" {
+  template = file("${path.module}/scripts/02c_mgmtdb_setup.sh")
+}
+
+resource "null_resource" "fpp_mgmtdb_setup" {
+  depends_on = [null_resource.fpp_changeoh]
+
   provisioner "file" {
     content     = data.template_file.mgmtdb_setup_c.rendered
     destination = local.mgmtdb_script_c
@@ -151,6 +222,37 @@ resource "null_resource" "fpp_provisioner" {
 
     }
   }
+
+  provisioner "remote-exec" {
+    connection  {
+      type        = "ssh"
+      host        = data.oci_core_vnic.fppll_vnic.public_ip_address
+      agent       = false
+      timeout     = "30m"
+      user        = var.vm_user
+      private_key = var.ssh_private_key
+    }
+   
+    inline = [
+       "chmod +x ${local.mgmtdb_script_c}",
+       "sudo -u grid ${local.mgmtdb_script_c}",
+    ]
+
+   }
+}
+
+###################################################
+# ssh provisioner #4: add and start FPP Server
+data "template_file" "fpp_setup" {
+  template = file("${path.module}/scripts/03_fpp_setup.sh")
+  vars = {
+    gns_ip         = cidrhost(var.subnet_cidr, var.gns_ip_offset)
+  }
+
+}
+resource "null_resource" "fpp_provisioner" {
+  depends_on = [null_resource.fpp_changeoh]
+
   provisioner "file" {
     content     = data.template_file.fpp_setup.rendered
     destination = local.fpp_script
@@ -176,14 +278,6 @@ resource "null_resource" "fpp_provisioner" {
     }
    
     inline = [
-       "chmod +x ${local.repo_script}",
-       "sudo ${local.repo_script}" ,
-       "chmod +x ${local.mgmtdb_script_a}",
-       "sudo -u oracle ${local.mgmtdb_script_a}",
-       "chmod +x ${local.mgmtdb_script_b}",
-       "sudo ${local.mgmtdb_script_b}",
-       "chmod +x ${local.mgmtdb_script_c}",
-       "sudo -u grid ${local.mgmtdb_script_c}",
        "chmod +x ${local.fpp_script}",
        "sudo ${local.fpp_script}"
     ]
@@ -191,8 +285,10 @@ resource "null_resource" "fpp_provisioner" {
    }
 }
 
+###################################################
+# "parallel" provisioner: change the naming resolution so that it takes into account the subnet
 resource "null_resource" "dhclient_resolv_setup" {
-  depends_on = [oci_database_db_system.fppll_db_system, null_resource.fpp_provisioner]
+  depends_on = [oci_database_db_system.fppll_db_system, null_resource.fpp_os_setup]
 
   provisioner "file" {
     content     = "export PRESERVE_HOSTINFO=3"
@@ -238,7 +334,5 @@ resource "null_resource" "dhclient_resolv_setup" {
        "sudo chmod 755 /etc/dhcp/dhclient-exit-hooks.d/set-domain.sh",
        "sudo new_ip_address=${data.oci_core_vnic.fppll_vnic.private_ip_address} reason=RENEW  /etc/dhcp/dhclient-exit-hooks.d/set-domain.sh"
     ]
-
    }
-
 }

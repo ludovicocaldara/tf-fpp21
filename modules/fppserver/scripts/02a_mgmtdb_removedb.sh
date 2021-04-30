@@ -13,6 +13,10 @@ GI_HOME=$(cat /etc/oracle/olr.loc 2>/dev/null | grep crs_home | awk -F= '{print 
 # get DB_UNIQUE_NAME of the DBCS database
 eval $($GI_HOME/bin/crsctl stat res -f -w "(TYPE = ora.database.type)" | grep DB_UNIQUE_NAME)
 
+# ugly but effective hack: take the OH that is not CRS
+export ORACLE_HOME=$(cat /u01/app/oraInventory/ContentsXML/inventory.xml | grep TYPE=\"O\" | grep -v CRS=\"true\" | awk '{print $3}' | awk -F\" '{print $2}')
+
+
 # stop and remove the DB
 $ORACLE_HOME/bin/srvctl stop database -database $DB_UNIQUE_NAME
 $ORACLE_HOME/bin/srvctl remove database -database $DB_UNIQUE_NAME -noprompt
